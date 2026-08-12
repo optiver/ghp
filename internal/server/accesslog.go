@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/log/noop"
 
 	"github.com/goodtune/ghp/internal/metrics"
+	"github.com/goodtune/ghp/internal/netutil"
 	"github.com/goodtune/ghp/internal/proxy"
 )
 
@@ -73,7 +74,7 @@ func newAccessLogWriter(logger otellog.Logger) *accessLogWriter {
 
 // accessLogHandler wraps an http.Handler with OpenTelemetry access logging and
 // per-backend Prometheus metrics.
-func accessLogHandler(backend string, next http.Handler, aw *accessLogWriter) http.Handler {
+func accessLogHandler(backend string, next http.Handler, aw *accessLogWriter, trustProxyHeaders bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
@@ -87,6 +88,7 @@ func accessLogHandler(backend string, next http.Handler, aw *accessLogWriter) ht
 		dur := time.Since(start)
 		statusStr := strconv.Itoa(rec.status)
 
+		clientIP := netutil.ClientIP(r, trustProxyHeaders)
 		remoteIP, remotePort := splitRemoteAddr(r.RemoteAddr)
 		serverHost, serverPort := splitHostPortPreserve(r.Host)
 
@@ -107,12 +109,12 @@ func accessLogHandler(backend string, next http.Handler, aw *accessLogWriter) ht
 			otellog.Int(attrHTTPResponseBodySize, rec.size),
 			otellog.String(attrNetworkProtocolName, "http"),
 			otellog.String(attrNetworkProtocolVersion, protocolVersion(r.Proto)),
-			otellog.String(attrClientAddress, remoteIP),
+			otellog.String(attrClientAddress, clientIP),
 			otellog.String(attrServerAddress, serverHost),
 			otellog.Float64(attrHTTPServerRequestDuration, dur.Seconds()),
 			otellog.String(attrGHPBackend, backend),
 		}
-		if remotePort != "" {
+		if remotePort != "" && clientIP == remoteIP {
 			if p, err := strconv.Atoi(remotePort); err == nil {
 				attrs = append(attrs, otellog.Int(attrClientPort, p))
 			}
@@ -158,6 +160,7 @@ func accessLogHandler(backend string, next http.Handler, aw *accessLogWriter) ht
 
 		metrics.HttpRequestDuration.WithLabelValues(backend, r.Method, statusStr).Observe(dur.Seconds())
 		metrics.HttpRequestTotal.WithLabelValues(backend, r.Method, statusStr).Inc()
+		metrics.ObserveClientRequest(clientIP, backend, *slots.TokenType, rec.status)
 	})
 }
 

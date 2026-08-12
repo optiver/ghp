@@ -305,6 +305,36 @@ func TestObserveDecision_RedirectHeadCheck(t *testing.T) {
 	}
 }
 
+func TestObserveClientRequest(t *testing.T) {
+	labels := prometheus.Labels{
+		"client":     "10.1.2.3",
+		"backend":    "api.github.com",
+		"token_type": "proxy",
+		"status":     "200",
+	}
+	before := getCounterValue(t, ClientRequestTotal, labels)
+	ObserveClientRequest("10.1.2.3", "api.github.com", "proxy", 200)
+	after := getCounterValue(t, ClientRequestTotal, labels)
+	if after-before != 1 {
+		t.Errorf("expected counter to increment by 1, got %f", after-before)
+	}
+}
+
+func TestObserveClientRequest_UnknownDefaults(t *testing.T) {
+	labels := prometheus.Labels{
+		"client":     "unknown",
+		"backend":    "github.com",
+		"token_type": "unknown",
+		"status":     "404",
+	}
+	before := getCounterValue(t, ClientRequestTotal, labels)
+	ObserveClientRequest("", "github.com", "", 404)
+	after := getCounterValue(t, ClientRequestTotal, labels)
+	if after-before != 1 {
+		t.Errorf("expected counter to increment by 1, got %f", after-before)
+	}
+}
+
 func TestObservePassthroughRequest(t *testing.T) {
 	tests := []struct {
 		name      string

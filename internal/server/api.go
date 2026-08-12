@@ -119,7 +119,7 @@ func NewAPI(ctx context.Context, cfg *config.Config, store database.Store, ts *t
 		logger:             logger,
 		httpClient:         &http.Client{Timeout: 10 * time.Second},
 		auditLog:           aw,
-		tokenCreateLimiter: auth.NewIPRateLimiter(20, time.Minute, "/api/tokens", logger),
+		tokenCreateLimiter: auth.NewIPRateLimiter(20, time.Minute, "/api/tokens", cfg.Server.TrustProxyHeaders, logger),
 	}
 }
 

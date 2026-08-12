@@ -181,6 +181,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		extractTokenType = string(tt)
 	}
 	metrics.ObserveDecision(metrics.StageTokenExtraction, extractTokenType, time.Since(extractStart))
+	if extractTokenType != "" {
+		SetTokenType(r, extractTokenType)
+	}
 	if clientToken == "" {
 		// Check the token type border policy before forwarding.
 		borderStart := time.Now()
@@ -790,6 +793,7 @@ func (h *Handler) forwardPassthrough(w http.ResponseWriter, r *http.Request, pat
 	// Grab the raw GitHub token before forwarding so we can resolve the
 	// username for metrics/access-log purposes without storing the token.
 	rawToken := extractRawGitHubToken(r)
+	SetTokenType(r, passthroughTokenType(rawToken))
 
 	// Trigger async username lookup early so it can run concurrently with
 	// the upstream roundtrip. On a cache hit this returns immediately; on a

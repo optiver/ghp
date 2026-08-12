@@ -39,7 +39,7 @@ values from the config file.
 | `GHP_SERVER_HTTP_LISTEN` | HTTP listen address for HTTPS redirects | |
 | `GHP_SERVER_MANAGEMENT_HOST` | Hostname for the management UI and API | |
 | `GHP_SERVER_BASE_URL` | Public base URL for OAuth callbacks and links | |
-| `GHP_SERVER_TRUST_PROXY_HEADERS` | Honour `Forwarded` / `X-Forwarded-Proto` / `X-Forwarded-Host` when `base_url` is unset (only enable behind a trusted reverse proxy) | `false` |
+| `GHP_SERVER_TRUST_PROXY_HEADERS` | Honour `Forwarded` / `X-Forwarded-Proto` / `X-Forwarded-Host` when `base_url` is unset, and `Forwarded` (`for=`) / `X-Real-IP` / `X-Forwarded-For` for client attribution in access logs, `ghp_client_request_total`, and the per-IP auth rate limiter (only enable behind a trusted reverse proxy) | `false` |
 | `GHP_SERVER_SYSTEMD_SOCKET_ACTIVATION` | Accept sockets from systemd instead of binding addresses | `false` |
 
 ### GitHub
@@ -204,9 +204,12 @@ server:
   management_host: ""          # hostname for management UI (e.g. ghp.example.com)
   base_url: ""                 # public base URL (e.g. https://ghp.example.com)
   # trust_proxy_headers: false # honour Forwarded / X-Forwarded-Proto / X-Forwarded-Host
-                                #   when base_url is unset. Set true only behind a trusted
-                                #   reverse proxy that strips and rewrites these headers.
-                                #   Prefer setting base_url instead.
+                                #   when base_url is unset, and Forwarded (for=) /
+                                #   X-Real-IP / X-Forwarded-For for client attribution in
+                                #   access logs, the ghp_client_request_total metric, and
+                                #   the per-IP auth rate limiter. Set true only behind a
+                                #   trusted reverse proxy that strips and rewrites these
+                                #   headers. Prefer setting base_url for URL construction.
   # systemd_socket_activation: false  # accept sockets from systemd
 
 tls:

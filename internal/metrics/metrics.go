@@ -34,6 +34,11 @@ var (
 		Help: "Total number of HTTP requests by backend.",
 	}, []string{"backend", "method", "status"})
 
+	ClientRequestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ghp_client_request_total",
+		Help: "Total number of requests by client source IP, backend, token type, and status.",
+	}, []string{"client", "backend", "token_type", "status"})
+
 	// Proxy-level metrics for ghx_/gha_ authenticated requests.
 	ProxyRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ghp_proxy_request_duration_seconds",
@@ -375,6 +380,16 @@ func ObservePassthroughRequest(backendName, method string, status int, dur time.
 	statusStr := strconv.Itoa(status)
 	ProxyRequestDuration.WithLabelValues(backendName, method, statusStr, tokenType, apiType, username, "").Observe(dur.Seconds())
 	ProxyRequestTotal.WithLabelValues(backendName, method, statusStr, tokenType, apiType, username, "").Inc()
+}
+
+func ObserveClientRequest(client, backendName, tokenType string, status int) {
+	if client == "" {
+		client = "unknown"
+	}
+	if tokenType == "" {
+		tokenType = "unknown"
+	}
+	ClientRequestTotal.WithLabelValues(client, backendName, tokenType, strconv.Itoa(status)).Inc()
 }
 
 // SetBuildInfo records build metadata as a gauge with a constant value of 1.

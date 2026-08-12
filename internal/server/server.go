@@ -470,12 +470,13 @@ func (s *Server) Run(ctx context.Context) error {
 	aw := newAccessLogWriter(s.logProvider.Logger(accessLogScope))
 
 	// Build host dispatch with access logging on all handlers.
+	trustProxyHeaders := s.cfg.Server.TrustProxyHeaders
 	dispatch := newHostDispatch(hostDispatchConfig{
-		apiHandler:      accessLogHandler(backend.API, proxyHandler, aw),
-		githubHandler:   accessLogHandler(backend.GitHub, githubPassthrough, aw),
-		codeloadHandler: accessLogHandler(backend.Codeload, codeloadHandler, aw),
-		copilotHandler:  accessLogHandler(backend.Copilot, copilotPassthrough, aw),
-		mgmtHandler:     accessLogHandler(backend.Mgmt, web.SessionUsernameMiddleware(authHandler)(web.SecurityHeadersMiddleware(mux)), aw),
+		apiHandler:      accessLogHandler(backend.API, proxyHandler, aw, trustProxyHeaders),
+		githubHandler:   accessLogHandler(backend.GitHub, githubPassthrough, aw, trustProxyHeaders),
+		codeloadHandler: accessLogHandler(backend.Codeload, codeloadHandler, aw, trustProxyHeaders),
+		copilotHandler:  accessLogHandler(backend.Copilot, copilotPassthrough, aw, trustProxyHeaders),
+		mgmtHandler:     accessLogHandler(backend.Mgmt, web.SessionUsernameMiddleware(authHandler)(web.SecurityHeadersMiddleware(mux)), aw, trustProxyHeaders),
 		managementHost:  s.cfg.Server.ManagementHost,
 	})
 

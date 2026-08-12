@@ -106,6 +106,9 @@ func NewScopedPassthroughHandler(inner http.Handler, enforcer ScopeEnforcer, res
 			extractTokenType = string(tt)
 		}
 		metrics.ObserveDecision(metrics.StageTokenExtraction, extractTokenType, time.Since(extractStart))
+		if extractTokenType != "" {
+			SetTokenType(r, extractTokenType)
+		}
 
 		// applyEnterprise evaluates the enterprise restriction policy against
 		// the request's target, mutating r.Header (the reverse proxy copies
@@ -162,6 +165,7 @@ func NewScopedPassthroughHandler(inner http.Handler, enforcer ScopeEnforcer, res
 			// lookup before the upstream roundtrip so the background
 			// goroutine can run concurrently with the upstream request.
 			raw := extractRawGitHubToken(r)
+			SetTokenType(r, passthroughTokenType(raw))
 			if ur != nil && raw != "" {
 				ur.ResolveFromGitHubToken(r.Context(), raw)
 			}

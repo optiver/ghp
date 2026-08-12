@@ -23,9 +23,31 @@ Scrape the metrics endpoint at `http(s)://<ghp-server>:9136/metrics` (HTTPS when
 |--------|------|-------------|
 | `ghp_http_request_duration_seconds` | Histogram | Duration of all HTTP requests (labels: `backend`, `method`, `status`) |
 | `ghp_http_request_total` | Counter | Total HTTP requests (labels: `backend`, `method`, `status`) |
+| `ghp_client_request_total` | Counter | Requests by originating client (labels: `client`, `backend`, `token_type`, `status`) |
 
 The `backend` label distinguishes traffic by virtualhost: `api.github.com`,
 `github.com`, `codeload.github.com`, `copilot`, or `management`.
+
+The `client` label on `ghp_client_request_total` is the source IP of the
+request, so operators can spot a host generating disproportionate traffic.
+By default it is the direct peer address; when `server.trust_proxy_headers`
+is enabled, the RFC 7239 `Forwarded` header (`for=`), then `X-Real-IP`,
+then `X-Forwarded-For` take precedence. `trust_proxy_headers` means exactly
+one trusted reverse proxy sits in front of ghp, so for the chain-style
+headers (`Forwarded`, `X-Forwarded-For`) the *rightmost* entry is used —
+that is the one appended by the trusted proxy; entries to its left arrived
+inside the client's own request and are spoofable. Header values must parse
+as an IP address (an optional port is tolerated); anything else — including
+RFC 7239 `unknown` and obfuscated identifiers — falls back to the peer
+address, so clients cannot inject arbitrary strings into label values. Only
+enable `trust_proxy_headers` behind a reverse proxy that strips or
+overwrites these headers. The same attribution is used for the per-IP
+authentication rate limiter, so behind a reverse proxy the flag must be set
+for rate limits to apply per client rather than per proxy. The
+`token_type` label is `proxy` (ghx_), `agent` (gha_), a native GitHub prefix
+(`gho`, `ghp`, `ghs`, ...), or `unknown` for unauthenticated traffic.
+Cardinality is bounded by the number of distinct client hosts; map IPs to
+hostnames in Grafana or with recording rules if needed.
 
 #### Proxy Metrics
 
@@ -211,7 +233,7 @@ body `handled request`. Attributes use HTTP semantic conventions:
 | `http.response.body.size` | Response body bytes |
 | `http.server.request.duration` | Request duration (seconds) |
 | `network.protocol.name` / `network.protocol.version` | e.g. `http` / `1.1` |
-| `client.address` / `client.port` | Remote peer |
+| `client.address` / `client.port` | Client address (honours forwarded headers when `server.trust_proxy_headers` is set; the port is omitted when the address came from a forwarded header) |
 | `server.address` / `server.port` | Host the request targeted |
 | `user_agent.original` | User-Agent header |
 | `enduser.id` | GitHub username when available, otherwise the internal user ID |

@@ -113,6 +113,7 @@ Labels: `stage`, `token_type` (`proxy` for `ghx_` tokens, `agent` for `gha_` tok
 ### Existing metrics
 
 - `ghp_http_request_duration_seconds` / `ghp_http_request_total` — all HTTP requests by backend
+- `ghp_client_request_total` — requests by originating client IP (`client`, `backend`, `token_type`, `status`); the `client` label honours forwarded headers only when `server.trust_proxy_headers` is set
 - `ghp_proxy_request_duration_seconds` / `ghp_proxy_request_total` — proxied GitHub requests with full labels
 - `ghp_token_active` / `ghp_token_created_total` / `ghp_token_revoked_total` — token lifecycle
 - `ghp_github_ratelimit_remaining` / `ghp_github_ratelimit_limit` — GitHub rate limit gauges

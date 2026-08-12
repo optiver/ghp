@@ -112,16 +112,16 @@ func NewHandler(cfg *config.Config, store database.Store, enc *crypto.Encryptor,
 		store:            store,
 		encryptor:        enc,
 		logger:           logger,
-		loginLimiter:     NewIPRateLimiter(100, time.Minute, "/auth/test-login", logger),
-		githubLimiter:    NewIPRateLimiter(10, time.Minute, "/auth/github", logger),
-		authorizeLimiter: NewIPRateLimiter(10, time.Minute, "/auth/authorize", logger),
+		loginLimiter:     NewIPRateLimiter(100, time.Minute, "/auth/test-login", cfg.Server.TrustProxyHeaders, logger),
+		githubLimiter:    NewIPRateLimiter(10, time.Minute, "/auth/github", cfg.Server.TrustProxyHeaders, logger),
+		authorizeLimiter: NewIPRateLimiter(10, time.Minute, "/auth/authorize", cfg.Server.TrustProxyHeaders, logger),
 		// /cli/auth/device kicks off a flow that creates a database row, so
 		// it gets the same conservative ceiling as /auth/github. The polling
 		// endpoint is more permissive — a single CLI run polls every few
 		// seconds for up to 10 minutes, which is up to ~300 hits, and
 		// multiple CLI processes may run from the same NAT'd IP.
-		deviceStartLimiter: NewIPRateLimiter(10, time.Minute, "/cli/auth/device", logger),
-		devicePollLimiter:  NewIPRateLimiter(600, time.Minute, "/cli/auth/device/token", logger),
+		deviceStartLimiter: NewIPRateLimiter(10, time.Minute, "/cli/auth/device", cfg.Server.TrustProxyHeaders, logger),
+		devicePollLimiter:  NewIPRateLimiter(600, time.Minute, "/cli/auth/device/token", cfg.Server.TrustProxyHeaders, logger),
 		httpClient:         &http.Client{Timeout: authHTTPTimeout},
 	}
 	if cfg.Auth.JWTPrivateKey != "" || cfg.Auth.JWTPrivateKeyFile != "" {

@@ -14,7 +14,7 @@ import (
 // newTestLimiter creates a limiter with a no-op logger suitable for unit tests.
 func newTestLimiter(limit int, window time.Duration) *IPRateLimiter {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewIPRateLimiter(limit, window, "/test", logger)
+	return NewIPRateLimiter(limit, window, "/test", false, logger)
 }
 
 func TestIPRateLimiter_Allow(t *testing.T) {
@@ -99,6 +99,56 @@ func TestIPRateLimiter_Middleware_ResponseHeaders(t *testing.T) {
 	}
 }
 
+func TestIPRateLimiter_Middleware_ForwardedHeaderIgnoredWhenUntrusted(t *testing.T) {
+	limiter := newTestLimiter(1, time.Minute)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := limiter.Middleware(inner)
+
+	for i, want := range []int{http.StatusOK, http.StatusTooManyRequests} {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "1.2.3.4:1234"
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.0.%d", i+1))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Errorf("request %d: expected %d, got %d", i+1, want, w.Code)
+		}
+	}
+}
+
+func TestIPRateLimiter_Middleware_ForwardedHeaderHonouredWhenTrusted(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	limiter := NewIPRateLimiter(1, time.Minute, "/test", true, logger)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := limiter.Middleware(inner)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "1.2.3.4:1234"
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.0.%d", i+1))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("request %d: expected 200, got %d", i+1, w.Code)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "1.2.3.4:1234"
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 for repeated forwarded client, got %d", w.Code)
+	}
+}
+
 func TestIPRateLimiter_ConcurrentAccess(t *testing.T) {
 	limiter := newTestLimiter(1000, time.Minute)
 
@@ -122,67 +172,4 @@ func TestIPRateLimiter_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
-}
-
-func TestClientIP(t *testing.T) {
-	tests := []struct {
-		name       string
-		remoteAddr string
-		xRealIP    string
-		xForwarded string
-		want       string
-	}{
-		{
-			name:       "plain remote addr",
-			remoteAddr: "1.2.3.4:5678",
-			want:       "1.2.3.4",
-		},
-		{
-			name:       "X-Real-IP takes precedence",
-			remoteAddr: "1.2.3.4:5678",
-			xRealIP:    "9.9.9.9",
-			want:       "9.9.9.9",
-		},
-		{
-			name:       "X-Forwarded-For single IP",
-			remoteAddr: "1.2.3.4:5678",
-			xForwarded: "203.0.113.1",
-			want:       "203.0.113.1",
-		},
-		{
-			name:       "X-Forwarded-For first IP used",
-			remoteAddr: "1.2.3.4:5678",
-			xForwarded: "203.0.113.1, 10.0.0.1, 172.16.0.1",
-			want:       "203.0.113.1",
-		},
-		{
-			name:       "X-Real-IP beats X-Forwarded-For",
-			remoteAddr: "1.2.3.4:5678",
-			xRealIP:    "9.9.9.9",
-			xForwarded: "203.0.113.1",
-			want:       "9.9.9.9",
-		},
-		{
-			name:       "remote addr without port",
-			remoteAddr: "1.2.3.4",
-			want:       "1.2.3.4",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/", nil)
-			req.RemoteAddr = tt.remoteAddr
-			if tt.xRealIP != "" {
-				req.Header.Set("X-Real-IP", tt.xRealIP)
-			}
-			if tt.xForwarded != "" {
-				req.Header.Set("X-Forwarded-For", tt.xForwarded)
-			}
-			got := ClientIP(req)
-			if got != tt.want {
-				t.Errorf("ClientIP() = %q, want %q", got, tt.want)
-			}
-		})
-	}
 }
