@@ -14,6 +14,22 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	code := isolateTestsFromHostSystemConfig(m)
+	os.Exit(code)
+}
+
+func isolateTestsFromHostSystemConfig(m *testing.M) int {
+	dir, err := os.MkdirTemp("", "ghp-test")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: %v\n", err)
+		return 1
+	}
+	defer os.RemoveAll(dir)
+	systemConfigPathOverride = filepath.Join(dir, "absent-system-config.yaml")
+	return m.Run()
+}
+
 // TestHelpOutput_Root verifies that the root help text mentions all subcommands and flags.
 func TestHelpOutput_Root(t *testing.T) {
 	rootCmd := newRootCmd()
