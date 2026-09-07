@@ -847,8 +847,7 @@ func (h *Handler) forwardPassthrough(w http.ResponseWriter, r *http.Request, pat
 	// Enterprise access restriction: inject the header unless an exception
 	// covers the request target, in which case a managed identity may also be
 	// substituted for the caller's credential.
-	owner, repoName := enterpriseTargetFromAPIPath(path)
-	if identityTok := h.enterprise.Apply(r.Context(), proxyReq.Header, owner, repoName, h.enterpriseUsername(r, rawToken), ""); identityTok != "" {
+	if identityTok := h.enterprise.ApplyAPI(proxyReq, h.enterpriseUsername(r, rawToken), ""); identityTok != "" {
 		proxyReq.Header.Set("Authorization", substituteAuthHeader(r.Header.Get("Authorization"), identityTok))
 	}
 
@@ -939,8 +938,7 @@ func (h *Handler) forwardRequest(w http.ResponseWriter, r *http.Request, path, a
 	// Enterprise access restriction: inject the header unless an exception
 	// covers the request target, in which case a managed identity may also be
 	// substituted for the resolved credential.
-	owner, repoName := enterpriseTargetFromAPIPath(path)
-	if identityTok := h.enterprise.Apply(r.Context(), proxyReq.Header, owner, repoName, h.enterpriseUsername(r, rawTokenFromAuthValue(authHeader)), tokenType); identityTok != "" {
+	if identityTok := h.enterprise.ApplyAPI(proxyReq, h.enterpriseUsername(r, rawTokenFromAuthValue(authHeader)), tokenType); identityTok != "" {
 		proxyReq.Header.Set("Authorization", substituteAuthHeader(authHeader, identityTok))
 	}
 

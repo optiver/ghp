@@ -173,13 +173,19 @@ func (p *EnterprisePolicy) Apply(ctx context.Context, hdr http.Header, owner, re
 		return ""
 	}
 	start := time.Now()
+	defer func() {
+		metrics.ObserveDecision(metrics.StageEnterpriseException, tokenType, time.Since(start))
+	}()
+	return p.apply(ctx, hdr, owner, repo, username)
+}
+
+func (p *EnterprisePolicy) apply(ctx context.Context, hdr http.Header, owner, repo string, username UsernameFunc) string {
 	token, omit := p.evaluate(ctx, owner, repo, username)
 	if omit {
 		hdr.Del(enterpriseHeader)
 	} else {
 		hdr.Set(enterpriseHeader, p.slug)
 	}
-	metrics.ObserveDecision(metrics.StageEnterpriseException, tokenType, time.Since(start))
 	return token
 }
 
@@ -415,8 +421,8 @@ func (c *teamChecker) lookupMembership(ctx context.Context, org, teamSlug, usern
 //	/orgs/{org}[/...]           → owner, ""
 //
 // Every other path — including /graphql, /search, and viewer-relative
-// endpoints — returns ("", ""), meaning no exception can apply and the
-// restriction header stays on.
+// endpoints — returns ("", ""). ApplyAPI handles the narrow CLI login
+// exception separately; these paths never match repository exceptions.
 func enterpriseTargetFromAPIPath(path string) (owner, repo string) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	switch parts[0] {

@@ -156,10 +156,41 @@ How each request is evaluated:
 5. Otherwise the header is simply omitted and the caller's own credential is
    forwarded.
 
+### Logging in with an external account
+
+When at least one valid `enterprise_exceptions` entry is configured, GHP also
+omits the enterprise header for the two authenticated API checks used by
+`gh auth login`:
+
+- `GET /` on api.github.com, without a query string or body, to validate the
+  token's `X-OAuth-Scopes` header.
+- `POST /graphql` containing only `query UserCurrent { viewer { login } }`.
+  The operation name is optional; whitespace, comments, and field aliases
+  are supported. The JSON body must use `application/json` and be at most
+  4 KiB. Additional fields, fragments, directives, variable definitions,
+  multiple operations, URL query parameters, and compressed bodies retain
+  the restriction header.
+
+This allows the CLI to identify an external account and save its token after
+the browser OAuth exchange, or validate a token passed with `--with-token`.
+Previously the identity lookup failed with GitHub's enterprise restriction
+error even though the intended repository was excepted. Existing exception
+configuration enables this behavior after upgrading GHP; no additional
+setting is required. Without valid exceptions, both checks remain restricted.
+
+The checks forward the caller's own credential and do not require team
+membership or substitute a managed identity. GitHub still validates the
+credential. Repository exceptions, team requirements, proxy-token scopes,
+and token-type border policies still apply to subsequent requests. REST
+`/user` and general GraphQL queries remain restricted, so commands that fetch
+profile, organization, or repository data through GraphQL may still fail for
+external accounts. The `auth_header_omitted` outcome on
+`ghp_enterprise_exception_total` records login exceptions.
+
 Known limitations:
 
-- **GraphQL requests are never exempted.** The API target cannot be derived
-  from the URL path, so `/graphql` always carries the restriction header.
+- **Repository GraphQL requests are never exempted.** Apart from the exact
+  login identity query above, `/graphql` carries the restriction header.
   Use the REST API for excepted repositories.
 - **Copilot traffic is never exempted** for the same reason.
 - Team gating identifies callers via their GitHub credential. Requests

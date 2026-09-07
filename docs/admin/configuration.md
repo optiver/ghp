@@ -53,7 +53,7 @@ values from the config file.
 | `GHP_GITHUB_PRIVATE_KEY` | PEM-encoded GitHub App private key content | |
 | `GHP_GITHUB_PRIVATE_KEY_FILE` | Path to GitHub App private key PEM file | |
 | `GHP_GITHUB_ENTERPRISE_SLUG` | Enterprise slug for access restriction header | |
-| — | `github.enterprise_exceptions` (targets exempt from the restriction header) is YAML-only; nested lists cannot be expressed as environment variables | |
+| — | `github.enterprise_exceptions` (targets exempt from the restriction header; also enables narrow external CLI login checks) is YAML-only; nested lists cannot be expressed as environment variables | |
 | `GHP_GITHUB_BASE_URL` | GitHub API base URL for GHES deployments (must be HTTPS; e.g. `https://ghes.example.com/api/v3`). Omit or leave empty for github.com. Per-app overrides are set via the admin UI. | `https://api.github.com` |
 
 ### TLS
@@ -177,6 +177,7 @@ github:
   # base_url: ""               # GHES API base URL (e.g. https://ghes.example.com/api/v3); omit for github.com
   # enterprise_exceptions:     # exempt targets from the enterprise access restriction header
   #                            # (YAML only — nested lists cannot be set via environment variables)
+  #                            # also permits CLI login identity/scope checks for external accounts
   #   - match:                 # account names ("torvalds", "kubernetes") or owner/repo pairs
   #       - torvalds
   #       - kubernetes/website

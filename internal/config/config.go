@@ -181,7 +181,9 @@ type GitHubConfig struct {
 	// mechanism for this feature — its documentation directs proxies to
 	// inject the header only for traffic that should be restricted — so the
 	// exemption is implemented here by omitting the header for matching
-	// requests. Only meaningful when EnterpriseSlug is non-empty. Because
+	// requests. At least one valid exception also enables the narrow CLI
+	// login identity/scope checks needed to authenticate external accounts.
+	// Only meaningful when EnterpriseSlug is non-empty. Because
 	// entries are nested structures, this field can only be configured via
 	// YAML, not environment variables.
 	EnterpriseExceptions []EnterpriseException `koanf:"enterprise_exceptions"`

@@ -247,7 +247,7 @@ func TestReleasesRedirectHeadCheckTotal(t *testing.T) {
 }
 
 func TestEnterpriseExceptionTotal(t *testing.T) {
-	outcomes := []string{"header_omitted", "identity_substituted", "team_denied", "unauthenticated_denied", "identity_error"}
+	outcomes := []string{"header_omitted", "auth_header_omitted", "identity_substituted", "team_denied", "unauthenticated_denied", "identity_error"}
 	for _, outcome := range outcomes {
 		t.Run(outcome, func(t *testing.T) {
 			labels := prometheus.Labels{"outcome": outcome}

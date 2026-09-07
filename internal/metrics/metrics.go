@@ -142,6 +142,8 @@ var (
 	// restriction exceptions that matched a request's target, labeled by
 	// outcome:
 	//   "header_omitted"       — exception applied; restriction header not injected
+	//   "auth_header_omitted"  — external CLI login identity/scope check;
+	//                            restriction header omitted without identity substitution
 	//   "identity_substituted" — exception applied and the caller's credential
 	//                            was replaced with a managed installation token
 	//   "team_denied"          — target matched but the caller is not a member
