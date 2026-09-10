@@ -22,6 +22,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 
+	"github.com/goodtune/ghp/internal/egress"
 	"github.com/goodtune/ghp/internal/netutil"
 )
 
@@ -42,7 +43,7 @@ import (
 // migrated to accessor methods (or new ones added — see the CodeloadRedirectTo
 // pattern) as they're touched.
 //
-// Static fields (GitHub, Database, Server, TLS, EncryptionKey, DevMode) are
+// Static fields (Egress, GitHub, Database, Server, TLS, EncryptionKey, DevMode) are
 // populated once at startup and never mutated, so they're safe to read
 // directly.
 type Config struct {
@@ -51,6 +52,7 @@ type Config struct {
 	// fields or is invisible to a reader that has the read lock.
 	mu sync.RWMutex
 
+	Egress   egress.Config  `koanf:"egress"`
 	GitHub   GitHubConfig   `koanf:"github"`
 	Database DatabaseConfig `koanf:"database"`
 	Server   ServerConfig   `koanf:"server"`
@@ -397,7 +399,7 @@ func Load(path string) (*Config, error) {
 			if i := strings.Index(s, "_"); i > 0 {
 				section, field := s[:i], s[i+1:]
 				switch section {
-				case "github", "database", "server", "tls", "tokens", "logging", "metrics", "otel", "auth", "block", "releases", "codeload", "cache":
+				case "github", "database", "server", "tls", "tokens", "logging", "metrics", "otel", "auth", "block", "releases", "codeload", "cache", "egress":
 					// Handle 3-level nesting for logging.file.*
 					if section == "logging" && strings.HasPrefix(field, "file_") {
 						return "logging.file." + field[len("file_"):], v
@@ -413,6 +415,10 @@ func Load(path string) (*Config, error) {
 
 	if err := k.Unmarshal("", cfg); err != nil {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
+	}
+
+	if err := cfg.Egress.Validate(); err != nil {
+		return nil, err
 	}
 
 	clientIPHeader, err := netutil.ParseIPHeader(cfg.Server.ClientIPHeader)

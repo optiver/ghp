@@ -61,6 +61,15 @@ type EnterprisePolicy struct {
 	logger     *slog.Logger
 }
 
+// WithEnterpriseTransport supplies the team lookup transport at construction.
+func WithEnterpriseTransport(transport http.RoundTripper) func(*EnterprisePolicy) {
+	return func(p *EnterprisePolicy) {
+		if p.teams != nil {
+			p.teams.client.Transport = transport
+		}
+	}
+}
+
 // NewEnterprisePolicy compiles the enterprise restriction configuration into a
 // policy. Returns nil when gh.EnterpriseSlug is empty (feature disabled).
 // identity provides installation tokens for identity substitution and team

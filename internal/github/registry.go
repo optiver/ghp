@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"sync"
 
@@ -13,6 +14,7 @@ import (
 
 // AppRegistry manages multiple AppTokenProviders, one per configured GitHub App.
 type AppRegistry struct {
+	transport http.RoundTripper // configured before LoadAll; retained across Reload
 	mu        sync.RWMutex
 	providers map[string]*AppTokenProvider // keyed by App.ID (database UUID)
 	defaultID string                       // ID of the default app
@@ -30,6 +32,11 @@ func NewAppRegistry(store database.Store, enc *crypto.Encryptor, logger *slog.Lo
 		encryptor: enc,
 		logger:    logger,
 	}
+}
+
+// SetTransport configures outbound transport before loading or using the registry.
+func (r *AppRegistry) SetTransport(transport http.RoundTripper) {
+	r.transport = transport
 }
 
 // LoadAll reads all App records from the store and creates an AppTokenProvider
@@ -108,6 +115,7 @@ func (r *AppRegistry) loadAppLocked(app *database.App) error {
 		return fmt.Errorf("creating provider: %w", err)
 	}
 
+	provider.SetTransport(r.transport)
 	r.providers[app.ID] = provider
 	r.logger.Info("app provider loaded", "app_id", app.ID, "name", app.Name, "github_app_id", app.AppID)
 	return nil

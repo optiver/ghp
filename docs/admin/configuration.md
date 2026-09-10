@@ -56,6 +56,17 @@ values from the config file.
 | — | `github.enterprise_exceptions` (targets exempt from the restriction header) is YAML-only; nested lists cannot be expressed as environment variables | |
 | `GHP_GITHUB_BASE_URL` | GitHub API base URL for GHES deployments (must be HTTPS; e.g. `https://ghes.example.com/api/v3`). Omit or leave empty for github.com. Per-app overrides are set via the admin UI. | `https://api.github.com` |
 
+### Outbound Proxy Pool
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GHP_EGRESS_STRATEGY` | `weighted_round_robin`, `least_connections`, or `ip_hash` | `weighted_round_robin` |
+| — | `egress.proxies`: YAML-only list of proxy `name`, `url`, and optional `weight` (default 1) | Empty; existing environment proxy behavior |
+
+An explicit pool overrides `HTTP_PROXY`/`HTTPS_PROXY` for GitHub-facing clients
+while honoring `NO_PROXY`. All pool settings require a restart. See
+[Outbound Proxy Pool](../features/egress.md) for strategy and routing details.
+
 ### TLS
 
 | Variable | Description | Default |
@@ -166,6 +177,16 @@ See [Git Cache](../features/git-cache.md) for details.
 ```yaml
 # encryption_key: ""            # WARNING: prefer GHP_ENCRYPTION_KEY env var; never commit this to version control
                                  # Not required when database.driver is "vault" (Vault encrypts at rest)
+
+# egress:                     # optional; omit to keep existing environment proxy settings
+#   strategy: weighted_round_robin  # or least_connections, ip_hash
+#   proxies:                  # YAML only; all pool settings require a restart
+#     - name: egress-a
+#       url: http://proxy-a.internal:3128
+#       weight: 3             # positive integer; defaults to 1
+#     - name: egress-b
+#       url: http://proxy-b.internal:3128
+#       weight: 1
 
 github:
   client_id: ""
@@ -316,7 +337,7 @@ The following settings can be changed without restarting the server by sending
 - `auth.allowed_redirects` — OAuth broker allowed redirects
 - `block` — border policy settings (anonymous git, token type blocking)
 - `releases` — release download policy and allow list (`mode`, `redirect_to`, `redirect_head_check`, `allow`); note that `redirect_head_check_netrc` and `redirect_not_found_template` are loaded once at startup and require a restart to change
-Settings that require a restart: database driver/DSN, server listen addresses,
+Settings that require a restart: `egress`, database driver/DSN, server listen addresses,
 `cache` (enable/disable, storage path),
 TLS certificates, the encryption key, logging configuration, metrics
 enable/disable, OAuth broker enable/disable and signing key

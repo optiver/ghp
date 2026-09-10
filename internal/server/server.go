@@ -40,6 +40,7 @@ import (
 	"github.com/goodtune/ghp/internal/crypto"
 	"github.com/goodtune/ghp/internal/database"
 	"github.com/goodtune/ghp/internal/docs"
+	"github.com/goodtune/ghp/internal/egress"
 	"github.com/goodtune/ghp/internal/gitcache"
 	"github.com/goodtune/ghp/internal/github"
 	"github.com/goodtune/ghp/internal/metrics"
@@ -206,6 +207,12 @@ func (s *Server) backfillTokenAppID(ctx context.Context, store database.Store, a
 // Run starts the server and blocks until shutdown.
 func (s *Server) Run(ctx context.Context) error {
 	metrics.SetBuildInfo(s.version)
+	pool, poolErr := egress.New(s.cfg.Egress)
+	if poolErr != nil {
+		return poolErr
+	}
+	defer pool.CloseIdleConnections()
+	outbound := pool.Transport()
 
 	// Open database.
 	var store database.Store
@@ -296,6 +303,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Build the AppRegistry with all apps from the store.
 	appRegistry := github.NewAppRegistry(store, enc, s.logger)
+	appRegistry.SetTransport(outbound)
 	loadAllFailed := false
 	if err := appRegistry.LoadAll(ctx); err != nil {
 		s.logger.Warn("failed to load app registry", "error", err)
@@ -342,6 +350,7 @@ func (s *Server) Run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("initializing GitHub App token provider: %w", err)
 			}
+			atp.SetTransport(outbound)
 			appTokenProvider = atp
 			s.logger.Info("github app token provider initialized (config fallback)", "app_id", s.cfg.GitHub.AppID)
 		}
@@ -361,19 +370,21 @@ func (s *Server) Run(ctx context.Context) error {
 	defer lifecycleCancel()
 
 	authHandler := auth.NewHandler(s.cfg, store, enc, s.logger)
+	authHandler.SetTransport(outbound)
 	// Periodically purge expired sessions, oauth_states, and
 	// cli_device_authorizations rows so the tables don't grow unbounded.
 	authHandler.StartCleanup(lifecycleCtx)
-	usernameResolver := proxy.NewUsernameResolver(store, s.logger)
+	usernameResolver := proxy.NewUsernameResolver(store, s.logger, proxy.WithUsernameTransport(outbound))
 	proxyTokenResolver := proxy.NewProxyTokenResolver(tokenSvc, store, enc, appTokenProvider)
 	usernameResolver.WarmCache(lifecycleCtx, proxyTokenResolver)
 	proxyHandler := proxy.NewHandler(s.cfg, tokenSvc, store, enc, appTokenProvider, usernameResolver, s.logger)
+	proxyHandler.SetTransport(outbound)
 
 	// Build the enterprise access restriction policy with the app registry as
 	// the identity source so exceptions can substitute managed installation
 	// tokens and verify team membership. NewHandler installed a baseline
 	// policy (matching only); this replaces it with the full-featured one.
-	enterprisePolicy := proxy.NewEnterprisePolicy(s.cfg.GitHub, appRegistry, s.logger)
+	enterprisePolicy := proxy.NewEnterprisePolicy(s.cfg.GitHub, appRegistry, s.logger, proxy.WithEnterpriseTransport(outbound))
 	proxyHandler.SetEnterprisePolicy(enterprisePolicy)
 
 	// Build audit log writer for OpenTelemetry audit log records.
@@ -394,6 +405,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}
 	api := NewAPI(lifecycleCtx, s.cfg, store, tokenSvc, authHandler, enc, concreteATP, appRegistry, proxyTokenResolver, usernameResolver, s.logger, auditWriter)
+	api.SetTransport(outbound)
 	webUI := web.NewHandler(authHandler, store, s.cfg.DevMode, s.version, s.logger)
 
 	// Build HTTP mux.
@@ -421,7 +433,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// Create passthrough handlers for github.com and *.githubcopilot.com.
 	// Reuse proxyTokenResolver created above for cache warming to avoid duplication.
 	githubInner := proxy.NewPassthroughHandler(
-		"https://github.com", proxyTokenResolver, s.logger, nil)
+		"https://github.com", proxyTokenResolver, s.logger, outbound)
 
 	// Wrap with git cache handler if enabled. The cache middleware wraps
 	// githubInner (the raw passthrough). The resulting handler is then wrapped
@@ -444,12 +456,14 @@ func (s *Server) Run(ctx context.Context) error {
 			return fmt.Errorf("create filesystem cache storage: %w", fsErr)
 		}
 		cacheRegistry := gitcache.NewRegistry(storageFactory, mustParseURL("https://github.com"))
+		cacheRegistry.SetEgressPool(pool)
 		cacheHandler := gitcache.NewHandler(
 			cacheRegistry,
 			nil, // Service token is optional for initial implementation.
 			"https://github.com",
 			s.cfg.Cache.StoragePath,
 		)
+		cacheHandler.SetTransport(outbound)
 		githubInner = gitcache.NewCacheLookup(githubInner, cacheHandler, store, s.logger)
 		gitcache.SyncCacheReposMetric(lifecycleCtx, store)
 		gitcache.StartCleanup(lifecycleCtx, s.cfg.Cache.StoragePath, store, 10*time.Minute)
@@ -463,10 +477,10 @@ func (s *Server) Run(ctx context.Context) error {
 		githubInner, tokenSvc, proxyTokenResolver, usernameResolver, enterprisePolicy, s.logger, s.cfg)
 	githubPassthrough = proxy.NewReleasesHandler(githubPassthrough, s.cfg, s.logger)
 
-	codeloadHandler := proxy.NewCodeloadHandler(s.cfg, s.logger, nil)
+	codeloadHandler := proxy.NewCodeloadHandler(s.cfg, s.logger, outbound)
 
 	copilotPassthrough := proxy.NewCopilotPassthroughHandler(
-		"https://copilot-proxy.githubusercontent.com", s.cfg.GitHub.EnterpriseSlug, s.logger, nil)
+		"https://copilot-proxy.githubusercontent.com", s.cfg.GitHub.EnterpriseSlug, s.logger, outbound)
 
 	// Build access log writer for OpenTelemetry access log records.
 	aw := newAccessLogWriter(s.logProvider.Logger(accessLogScope))
@@ -485,7 +499,14 @@ func (s *Server) Run(ctx context.Context) error {
 	// Wrap dispatch with the Server response header middleware so that every
 	// response across all backends carries the "Server: GitHub Proxy <version>"
 	// header.
-	handler := web.ServerHeaderMiddleware(s.version)(dispatch)
+	var routed http.Handler = dispatch
+	if pool != nil {
+		routed = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := egress.WithClientIP(r.Context(), netutil.ClientIP(r, clientIPHeader))
+			dispatch.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	handler := web.ServerHeaderMiddleware(s.version)(routed)
 
 	// Platform-specific signal handling (e.g. SIGUSR1 on Unix for config reload).
 	setupPlatformSignals(s.logger, s.reloadConfig)

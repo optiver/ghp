@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+
+	"github.com/goodtune/ghp/internal/egress"
 )
 
 // Registry manages the set of cached ManagedRepository instances, keyed
 // by owner/repo. It lazily initialises repositories on first access.
 type Registry struct {
+	egress         *egress.Pool
 	storageFactory CacheStorageFactory
 	baseURL        *url.URL // upstream GitHub URL (e.g. https://github.com)
 
@@ -25,6 +28,9 @@ func NewRegistry(factory CacheStorageFactory, baseURL *url.URL) *Registry {
 		repos:          make(map[string]*ManagedRepository),
 	}
 }
+
+// SetEgressPool sets the proxy pool before the registry is used.
+func (r *Registry) SetEgressPool(pool *egress.Pool) { r.egress = pool }
 
 // Get returns the ManagedRepository for the given owner/repo, creating
 // and initialising it if it doesn't exist yet (lazy population).
@@ -51,6 +57,7 @@ func (r *Registry) Get(owner, repo string) (*ManagedRepository, error) {
 		return nil, fmt.Errorf("open managed repo %s: %w", key, err)
 	}
 
+	m.egress = r.egress
 	r.repos[key] = m
 	return m, nil
 }

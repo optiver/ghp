@@ -91,7 +91,7 @@ func (h *Handler) handleBrokerCallback(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for access token, including the redirect_uri that was
 	// sent in the authorize request (GitHub requires it to match).
 	callbackURL := h.brokerCallbackURL(r)
-	accessToken, _, _, exErr := h.exchangeCode(code, callbackURL)
+	accessToken, _, _, exErr := h.exchangeCode(r.Context(), code, callbackURL)
 	if exErr != nil {
 		h.logger.Error("broker: OAuth code exchange failed", "error", exErr)
 		http.Error(w, "Authentication failed", http.StatusInternalServerError)
@@ -100,7 +100,7 @@ func (h *Handler) handleBrokerCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch user identity from GitHub. The access token is not stored;
 	// it is only used to retrieve the user's login and avatar.
-	user, err := h.getGitHubUser(accessToken)
+	user, err := h.getGitHubUser(r.Context(), accessToken)
 	if err != nil {
 		h.logger.Error("broker: failed to get GitHub user", "error", err)
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)

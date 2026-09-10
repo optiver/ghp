@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/gitprotocolio"
 
+	"github.com/goodtune/ghp/internal/egress"
 	"github.com/goodtune/ghp/internal/metrics"
 	"github.com/goodtune/ghp/internal/proxy"
 )
@@ -110,6 +111,11 @@ func NewHandler(registry *Registry, serviceTokenFn ServiceTokenFunc, upstreamBas
 		httpClient:       &http.Client{}, // no client-level timeout; per-request context controls it
 		responseCacheDir: responseCacheDir,
 	}
+}
+
+// SetTransport sets outbound transport before the component is used.
+func (h *Handler) SetTransport(transport http.RoundTripper) {
+	h.httpClient.Transport = transport
 }
 
 // ServeInfoRefs handles GET /owner/repo.git/info/refs?service=git-upload-pack
@@ -278,7 +284,7 @@ func (h *Handler) handleLsRefs(r *http.Request, repo *ManagedRepository, cmd Com
 		if parseErr == nil {
 			if hasUpdate, checkErr := repo.HasAnyUpdate(refs); checkErr == nil && hasUpdate {
 				go func() {
-					warmCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+					warmCtx, cancel := context.WithTimeout(egress.Background(r.Context()), 60*time.Second)
 					defer cancel()
 					svcToken, tokenErr := h.serviceTokenFn(warmCtx)
 					if tokenErr != nil {

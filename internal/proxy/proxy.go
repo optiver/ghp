@@ -151,6 +151,11 @@ func NewHandler(cfg *config.Config, ts *token.Service, store database.Store, enc
 	}
 }
 
+// SetTransport sets outbound transport before the component is used.
+func (h *Handler) SetTransport(transport http.RoundTripper) {
+	h.client.Transport = transport
+}
+
 // ServeHTTP handles proxied requests.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
