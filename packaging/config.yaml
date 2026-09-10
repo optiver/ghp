@@ -1,6 +1,18 @@
 # GHP - GitHub Proxy for Autonomous Coding Agents
 # Full reference: https://github.com/goodtune/ghp
 
+# Optional outbound proxy pool. Omit to retain HTTP_PROXY/HTTPS_PROXY behavior.
+# NO_PROXY still applies. All pool changes require a restart.
+# egress:
+#   strategy: weighted_round_robin  # or least_connections, ip_hash
+#   proxies:
+#     - name: egress-a
+#       url: http://proxy-a.internal:3128
+#       weight: 3                  # defaults to 1
+#     - name: egress-b
+#       url: http://proxy-b.internal:3128
+#       weight: 1
+
 github:
   # app_id: 0
   # client_id: ""

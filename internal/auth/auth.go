@@ -106,6 +106,11 @@ type Handler struct {
 	cleanupCancel context.CancelFunc
 }
 
+// SetTransport sets outbound transport before the component is used.
+func (h *Handler) SetTransport(transport http.RoundTripper) {
+	h.httpClient.Transport = transport
+}
+
 // NewHandler creates a new auth handler.
 func NewHandler(cfg *config.Config, store database.Store, enc *crypto.Encryptor, logger *slog.Logger) *Handler {
 	clientIPHeader := netutil.IPHeader(cfg.Server.ClientIPHeader)
@@ -509,7 +514,7 @@ func (h *Handler) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 			redirectURI += "?format=json"
 		}
 	}
-	accessToken, refreshToken, expiresIn, err := h.exchangeCode(code, redirectURI)
+	accessToken, refreshToken, expiresIn, err := h.exchangeCode(r.Context(), code, redirectURI)
 	if err != nil {
 		h.logger.Error("OAuth code exchange failed", "error", err)
 		http.Error(w, "Authentication failed", http.StatusInternalServerError)
@@ -517,7 +522,7 @@ func (h *Handler) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user info from GitHub.
-	ghUser, err := h.getGitHubUser(accessToken)
+	ghUser, err := h.getGitHubUser(r.Context(), accessToken)
 	if err != nil {
 		h.logger.Error("Failed to get GitHub user", "error", err)
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
@@ -773,7 +778,7 @@ type githubUser struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
-func (h *Handler) exchangeCode(code string, redirectURI string) (accessToken, refreshToken string, expiresIn int, err error) {
+func (h *Handler) exchangeCode(ctx context.Context, code string, redirectURI string) (accessToken, refreshToken string, expiresIn int, err error) {
 	params := url.Values{
 		"client_id":     {h.cfg.GitHub.ClientID},
 		"client_secret": {h.cfg.GitHub.ClientSecret},
@@ -783,7 +788,7 @@ func (h *Handler) exchangeCode(code string, redirectURI string) (accessToken, re
 		params.Set("redirect_uri", redirectURI)
 	}
 
-	req, err := http.NewRequest("POST", h.getGitHubBaseURL()+"/login/oauth/access_token",
+	req, err := http.NewRequestWithContext(ctx, "POST", h.getGitHubBaseURL()+"/login/oauth/access_token",
 		strings.NewReader(params.Encode()))
 	if err != nil {
 		return "", "", 0, err
@@ -829,8 +834,8 @@ func (h *Handler) exchangeCode(code string, redirectURI string) (accessToken, re
 	return result.AccessToken, result.RefreshToken, result.ExpiresIn, nil
 }
 
-func (h *Handler) getGitHubUser(accessToken string) (*githubUser, error) {
-	req, err := http.NewRequest("GET", h.getGitHubAPIBaseURL()+"/user", nil)
+func (h *Handler) getGitHubUser(ctx context.Context, accessToken string) (*githubUser, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", h.getGitHubAPIBaseURL()+"/user", nil)
 	if err != nil {
 		return nil, err
 	}

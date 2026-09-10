@@ -184,7 +184,7 @@ func TestExchangeCode_URLEncoding(t *testing.T) {
 			h := NewHandler(cfg, newTestStore(t), nil, slog.Default())
 			h.githubBaseURL = ghServer.URL
 
-			_, _, _, err := h.exchangeCode(tt.code, tt.redirectURI)
+			_, _, _, err := h.exchangeCode(context.Background(), tt.code, tt.redirectURI)
 			if err != nil {
 				t.Fatalf("exchangeCode returned error: %v", err)
 			}
@@ -231,7 +231,7 @@ func TestExchangeCode_HTTPError(t *testing.T) {
 	h := NewHandler(cfg, newTestStore(t), nil, slog.Default())
 	h.githubBaseURL = ghServer.URL
 
-	_, _, _, err := h.exchangeCode("bad-code", "")
+	_, _, _, err := h.exchangeCode(context.Background(), "bad-code", "")
 	if err == nil {
 		t.Fatal("expected error for HTTP 400, got nil")
 	}
@@ -255,7 +255,7 @@ func TestExchangeCode_EmptyAccessToken(t *testing.T) {
 	h := NewHandler(cfg, newTestStore(t), nil, slog.Default())
 	h.githubBaseURL = ghServer.URL
 
-	_, _, _, err := h.exchangeCode("code", "")
+	_, _, _, err := h.exchangeCode(context.Background(), "code", "")
 	if err == nil {
 		t.Fatal("expected error for empty access token, got nil")
 	}
@@ -279,7 +279,7 @@ func TestExchangeCode_ErrorDescription(t *testing.T) {
 	h := NewHandler(cfg, newTestStore(t), nil, slog.Default())
 	h.githubBaseURL = ghServer.URL
 
-	_, _, _, err := h.exchangeCode("expired-code", "")
+	_, _, _, err := h.exchangeCode(context.Background(), "expired-code", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

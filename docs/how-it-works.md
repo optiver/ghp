@@ -120,6 +120,15 @@ manage their own credentials, so ghp does not intercept tokens or enforce
 scopes on this traffic. All Copilot requests are still logged and counted
 in metrics for full visibility.
 
+### Outbound Proxy Pool
+
+GitHub-bound requests can use a configured pool of HTTP(S) forward proxies,
+selected by weighted round robin, least connections, or client IP hash. The
+pool also covers auxiliary GitHub calls such as OAuth and App token creation.
+Without a pool, existing environment proxy settings continue to apply.
+
+See [Outbound Proxy Pool](features/egress.md) for configuration and behavior.
+
 ### Git Cache
 
 For frequently-cloned repositories, ghp can cache git objects locally and serve

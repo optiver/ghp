@@ -13,12 +13,14 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage"
+	"github.com/goodtune/ghp/internal/egress"
 )
 
 // ManagedRepository represents a cached bare repository mirror. It wraps a
 // go-git repository and provides thread-safe fetch, object existence checks,
 // and ref comparison against upstream.
 type ManagedRepository struct {
+	egress      *egress.Pool
 	owner       string
 	name        string
 	upstreamURL *url.URL
@@ -149,11 +151,21 @@ func (m *ManagedRepository) FetchUpstream(ctx context.Context, token string) err
 		}
 	}
 
-	err := m.repo.FetchContext(ctx, opts)
+	lease, err := m.egress.Acquire(ctx, m.upstreamURL)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+	if proxyURL := lease.ProxyURL(); proxyURL != nil {
+		opts.ProxyOptions.URL = proxyURL.String()
+	}
+
+	err = m.repo.FetchContext(ctx, opts)
 	if err == git.NoErrAlreadyUpToDate {
 		err = nil
 	}
 	if err != nil {
+		err = lease.WrapError(err)
 		slog.Error("fetch upstream failed", "repo", m.owner+"/"+m.name, "err", err, "duration", time.Since(start))
 		return fmt.Errorf("fetch %s/%s: %w", m.owner, m.name, err)
 	}

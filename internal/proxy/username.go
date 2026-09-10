@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/goodtune/ghp/internal/database"
+	"github.com/goodtune/ghp/internal/egress"
 	"github.com/goodtune/ghp/internal/token"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
@@ -85,6 +86,11 @@ func NewUsernameResolver(store database.Store, logger *slog.Logger, opts ...func
 		opt(r)
 	}
 	return r
+}
+
+// WithUsernameTransport supplies the outbound transport at construction.
+func WithUsernameTransport(transport http.RoundTripper) func(*UsernameResolver) {
+	return func(u *UsernameResolver) { u.httpClient.Transport = transport }
 }
 
 // WithGraphQLURL returns an option that overrides the GitHub GraphQL endpoint
@@ -254,7 +260,7 @@ func (u *UsernameResolver) ResolveFromGitHubToken(ctx context.Context, rawToken 
 	// stored in the cache for future calls. Use a fresh background context so
 	// the lookup is not cancelled when the triggering request context ends.
 	go func() {
-		u.finish(key, f, u.resolveAndCacheGitHubUsername(context.Background(), key, rawToken))
+		u.finish(key, f, u.resolveAndCacheGitHubUsername(egress.Background(ctx), key, rawToken))
 	}()
 
 	// Best-effort: if the username is not yet cached, return empty string.

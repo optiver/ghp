@@ -119,6 +119,11 @@ type AppTokenProvider struct {
 	installationIDCache *expirable.LRU[string, int64]
 }
 
+// SetTransport sets outbound transport before the component is used.
+func (p *AppTokenProvider) SetTransport(transport http.RoundTripper) {
+	p.client.Transport = transport
+}
+
 // NewAppTokenProvider creates a provider from the given config.
 func NewAppTokenProvider(cfg AppConfig) (*AppTokenProvider, error) {
 	key, err := crypto.ParseRSAPrivateKey(cfg.PrivateKey)
@@ -385,6 +390,9 @@ func (p *AppTokenProvider) newAppClient() (*ghub.Client, error) {
 		return nil, err
 	}
 	opts := []ghub.ClientOptionsFunc{ghub.WithAuthToken(signed)}
+	if p.client.Transport != nil {
+		opts = append(opts, ghub.WithTransport(p.client.Transport))
+	}
 	if p.baseURL != "https://api.github.com" {
 		opts = append(opts, ghub.WithEnterpriseURLs(p.baseURL, p.baseURL))
 	}
@@ -510,6 +518,9 @@ func (p *AppTokenProvider) ListInstallationRepositories(ctx context.Context, ins
 
 	// Create a client authenticated as the installation.
 	instOpts := []ghub.ClientOptionsFunc{ghub.WithAuthToken(tok.GetToken())}
+	if p.client.Transport != nil {
+		instOpts = append(instOpts, ghub.WithTransport(p.client.Transport))
+	}
 	if p.baseURL != "https://api.github.com" {
 		instOpts = append(instOpts, ghub.WithEnterpriseURLs(p.baseURL, p.baseURL))
 	}

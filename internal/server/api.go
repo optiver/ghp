@@ -124,6 +124,11 @@ func NewAPI(ctx context.Context, cfg *config.Config, store database.Store, ts *t
 	}
 }
 
+// SetTransport sets outbound transport before the component is used.
+func (a *API) SetTransport(transport http.RoundTripper) {
+	a.httpClient.Transport = transport
+}
+
 // RegisterRoutes adds API routes to the given mux.
 // All routes require authentication via the auth handler.
 func (a *API) RegisterRoutes(mux *http.ServeMux) {
@@ -588,7 +593,11 @@ func (a *API) handleListUserRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := ghub.NewClient(ghub.WithAuthToken(plainToken))
+	clientOpts := []ghub.ClientOptionsFunc{ghub.WithAuthToken(plainToken)}
+	if a.httpClient.Transport != nil {
+		clientOpts = append(clientOpts, ghub.WithTransport(a.httpClient.Transport))
+	}
+	client, err := ghub.NewClient(clientOpts...)
 	if err != nil {
 		a.logger.Error("failed to create GitHub client", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Internal error"})
